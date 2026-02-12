@@ -1,0 +1,21 @@
+#!/bin/bash
+set -ouex pipefail
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+echo "::group::Executing install-bootloader"
+trap 'echo "::endgroup::"' EXIT
+
+
+apt-get update -y
+
+apt-get install -y $(cat $SCRIPT_DIR/packages/base)
+
+systemctl enable home.mount
+systemctl enable root.mount
+systemctl enable srv.mount
+systemctl enable mnt.mount
+systemctl enable media.mount
+systemctl enable opt.mount
+systemctl enable usr-local.mount
+
+chmod 440 /etc/sudoers.d/001-bootc

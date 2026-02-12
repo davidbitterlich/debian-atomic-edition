@@ -1,0 +1,10 @@
+#!/bin/bash
+set -ouex pipefail
+
+echo "::group::Executing install-bootloader"
+trap 'echo "::endgroup::"' EXIT
+
+# install bootloader
+
+apt-get update -y
+apt-get install -y --allow-remove-essential systemd systemd-boot grub-efi

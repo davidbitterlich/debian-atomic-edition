@@ -1,0 +1,52 @@
+#!/bin/bash
+
+set -ouex pipefail
+if [ -z "$1" ]; then
+    echo -e "ERROR: No desktop environment specified!"
+    echo "Usage: $0 {KDE|GNOME|MATE|XFCE}"
+    exit 1
+fi
+
+desktop_environment="$1"
+supported_desktops=("KDE" "GNOME" "MATE" "XFCE")
+
+if [[ ! " ${supported_desktops[@]} " =~ " ${desktop_environment} " ]]; then
+    echo -e "ERROR: Desktop environment '$desktop_environment' is not supported!"
+    echo "Supported environments: ${supported_desktops[*]}"
+    exit 1
+fi
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+echo "::group::Executing install $desktop_environment"
+trap 'echo "::endgroup::"' EXIT
+
+apt-get update -y
+
+apt_file="$SCRIPT_DIR/packages/$desktop_environment"
+flatpak_file="$SCRIPT_DIR/packages/$desktop_environment-flatpak"
+
+
+if [ -f "$apt_file" ]; then
+    echo "Installing $desktop_environment packages from package list..."
+    apt-get install --no-install-recommends -y $(cat "$apt_file")
+else
+    echo "ERROR: $apt_file not found!"
+    exit 1
+fi
+
+echo "Adding Flathub repository..."
+flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
+if [ -f "$flatpak_file" ]; then
+    echo "Installing Flatpak packages from package list..."
+    while IFS= read -r package || [ -n "$package" ]; do
+        [[ -z "$package" || "$package" =~ ^[[:space:]]*# ]] && continue
+        
+        echo "Installing flatpak: $package"
+        flatpak install -y --noninteractive flathub "$package"
+    done < "$flatpak_file"
+else
+    echo "WARNING: $flatpak_file not found, skipping Flatpak installation"
+fi
+
+echo "KDE installation complete!"

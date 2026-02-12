@@ -1,0 +1,3 @@
+[submodule "build_files/shared-scripts"]
+	path = build_files/shared-scripts
+	url = https://github.com/frostyard/shared-build-scripts.git
