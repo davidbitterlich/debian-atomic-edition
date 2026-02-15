@@ -10,6 +10,9 @@ apt-get update -y
 
 apt-get install -y $(cat $SCRIPT_DIR/packages/base)
 
+# add VERSION_ID
+echo "VERSION_ID=sid"
+
 systemctl enable home.mount
 systemctl enable root.mount
 systemctl enable srv.mount
