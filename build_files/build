@@ -11,7 +11,7 @@ apt-get update -y
 apt-get install -y $(cat $SCRIPT_DIR/packages/base)
 
 # add VERSION_ID
-echo "VERSION_ID=sid"
+sed -i '/^VERSION_ID=/b; /^VERSION=/a VERSION_ID="sid"' /etc/os-release
 
 systemctl enable home.mount
 systemctl enable root.mount
