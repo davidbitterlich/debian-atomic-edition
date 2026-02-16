@@ -7,6 +7,8 @@ base_dir := env("BUILD_BASE_DIR", ".")
 filesystem := env("BUILD_FILESYSTEM", "ext4")
 iso_dir := env("BUILD_ISO_DIR", base_dir + "/iso")
 selinux := path_exists('/sys/fs/selinux')
+host_arch_raw := `uname -m`
+host_arch := `echo {{ host_arch_raw }} | sed 's/x86_64/amd64/g; s/aarch64/arm64/g'`
 
 iso_file := "debian-bootc-installer.iso"
 work_dir := "build/work"
@@ -41,89 +43,78 @@ build-installer-image $target_image=image_name $target_tag=image_tag:
 
 build-iso $remote_registry=remote_registry $target_image=image_name $tag=image_tag $image_name_installer=image_name_installer:
     #!/usr/bin/env bash
-    #just build-installer-image $remote_registry/$target_image $tag
 
-    #just _prepare-iso-env
-    sudo just generate-bootable-image
-    just _compose-to-disk
+    just _prepare-iso-env
+    just generate-bootable-image
+    just _container-to-disk $remote_registry/$target_image:$tag
 
-    sudo just _create-squashfs
+    just _create-squashfs
+    #just _create-iso
 
 _prepare-iso-env:
     #!/usr/bin/env bash
     set -euo pipefail
     
-    # Cleanup alte Builds
     rm -rf {{iso_dir}} {{work_dir}}
     
-    # Erstelle Verzeichnisstruktur
     mkdir -p {{iso_dir}}/{live,isolinux,EFI/boot}
     mkdir -p {{work_dir}}/{disk,mount}
-    
-    # Installiere benötigte Tools (falls nicht vorhanden)
-    if ! command -v mksquashfs &> /dev/null; then
-        echo "Installing squashfs-tools..."
-        sudo apt-get install -y squashfs-tools
-    fi
-    
-    if ! command -v xorriso &> /dev/null; then
-        echo "Installing xorriso..."
-        sudo apt-get install -y xorriso isolinux syslinux-efi
-    fi
 
 _container-to-disk image:
     #!/usr/bin/env bash
-    set -euo pipefail
+    set -euox pipefail
     
-    DISK_IMAGE="{{work_dir}}/disk/bootable.img"
-    
-    if [ ! -e "${DISK_IMAGE}" ]; then
-        fallocate -l 20G "${DISK_IMAGE}"
-    fi
-    
-    # OHNE --composefs-backend!
-    {{container_runtime}} run --rm --privileged \
-        -v "${PWD}/${DISK_IMAGE}:/target-disk.img:rw" \
-        -v /dev:/dev \
-        {{image}} \
-        bootc install to-disk \
-            --via-loopback /target-disk.img \
-            --filesystem ext4 \
-            --wipe \
-            --bootloader systemd \
-            --generic-image
-    
-    echo "Disk image created: ${DISK_IMAGE}"
+    CONTAINER_ARCHIVE="container.tar"
+    ARCHIVE_PATH="{{work_dir}}/disk/$CONTAINER_ARCHIVE"
+
+    container_id=$({{container_runtime}} create {{image}})
+    {{container_runtime}} export $container_id -o $ARCHIVE_PATH
+    podman rm $container_id
 
 _create-squashfs:
     #!/usr/bin/env bash
-    set -euo pipefail
+    set -euox pipefail
     
-    DISK_IMAGE="bootable.img"
-    MOUNT_DIR="build/work/mount"
+    CONTAINER_ARCHIVE="container.tar"
+    ARCHIVE_PATH="{{work_dir}}/disk/$CONTAINER_ARCHIVE"
+    ROOTFS_PATH="{{work_dir}}/disk/rootfs"
     SQUASHFS="{{iso_dir}}/live/filesystem.squashfs"
-    
-    echo "${MOUNT_DIR}"
-    echo "Mounting disk image..."
-    LOOP_DEVICE=$(sudo losetup -f --show -P "${DISK_IMAGE}")
-    echo "${LOOP_DEVICE}"
-    sudo mount --verbose "${LOOP_DEVICE}p2" "${MOUNT_DIR}"
-    
-    echo "Copying kernel and initrd..."
-    # base dir is /usr/lib/modules/<version>
-    modules_dir="${MOUNT_DIR}/usr/lib/modules"
-    modules_actual_dir=$modules_dir/$(ls -d "$modules_dir" | head -n1)
-    sudo cp "$modules_actual_dir"/vmlinuz-* "{{iso_dir}}/live/vmlinuz"
-    sudo cp "$modules_actual_dir"/initrd.img-* "{{iso_dir}}/live/initrd"
 
-    echo "Creating squashfs (this may take a while)..."
-    sudo mksquashfs "${MOUNT_DIR}" "${SQUASHFS}" \
-        -comp xz \
-        -b 1M \
-        -Xbcj x86 \
-        -Xdict-size 100% \
-        -noappend
-    
+    # extract the tar file
+    if [ -d "$ROOTFS_PATH" ]
+    then
+        sudo rm -rf "$ROOTFS_PATH"
+    fi
+    mkdir "$ROOTFS_PATH"
+    sudo tar --numeric-owner -xf $ARCHIVE_PATH -C "$ROOTFS_PATH"
+    modules_dir="${ROOTFS_PATH}/usr/lib/modules"
+    echo "modules_dir=$modules_dir"
+    modules_actual_dir=$(sh -c "ls -d $modules_dir/*")
+    echo "modules_actual_dir=$modules_actual_dir"
+    sudo cp "$modules_actual_dir"/vmlinuz "{{iso_dir}}/live/vmlinuz"
+    sudo cp "$modules_actual_dir"/initramfs.img "{{iso_dir}}/live/initramfs.img"
+    sudo mksquashfs "$ROOTFS_PATH" "$SQUASHFS" -comp xz -b 131072
+
     echo "SquashFS created: ${SQUASHFS}"
-    trap "sudo umount ${MOUNT_DIR} 2>/dev/null || true; sudo losetup -d ${LOOP_DEVICE} 2>/dev/null" EXIT
-  
+
+# dummy
+_create-iso:
+    # 1. we need to install grub into the iso folder
+    {{ container_runtime }} run --rm -it -v {{iso_dir}}:/isodir debian:latest \
+    apt-get update && apt-get install -y grub-efi-{{host_arch}}-bin && \
+    grub-mkstandalone -O {{host_arch}}-efi -o BOOTX64.EFI "boot/grub/grub.cfg/grub.cfg"
+    xorriso -as mkisofs \
+        -iso-level 3 \
+        -o live.iso \
+        -full-iso9660-filenames \
+        -volid "LIVE_ISO" \
+        -eltorito-boot isolinux/isolinux.bin \
+        -eltorito-catalog isolinux/boot.cat \
+        -no-emul-boot \
+        -boot-load-size 4 \
+        -boot-info-table \
+        -eltorito-alt-boot \
+        -e EFI/boot/bootx64.efi \
+        -no-emul-boot \
+        -isohybrid-gpt-basdat \
+        -output iso/
