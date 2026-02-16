@@ -1,0 +1,23 @@
+ARG IMAGE
+ARG TAG
+FROM scratch AS ctx
+COPY build_files /
+
+FROM $IMAGE:$TAG
+
+# install and prepare calamares
+RUN --mount=type=bind,from=ctx,source=/,target=/ctx,rw \
+    --mount=type=cache,dst=/var/cache \
+    --mount=type=cache,dst=/var/log \
+    --mount=type=cache,dst=/var/lib/apt \
+    --mount=type=cache,dst=/var/lib/dpkg/updates \
+    --mount=type=tmpfs,dst=/tmp \
+    apt-get update && apt-get install -y calamares calamares-settings-debian && \
+    apt-get clean && cp -r /ctx/calamares/* /
+
+# prepare live environment
+RUN echo $IMAGE > /etc/hostname
+RUN echo "127.0.1.1 $IMAGE" >> /etc/hosts
+RUN useradd -m -s /bin/bash -d /var/home/live-user live-user && echo "live-user:changeme" | chpasswd
+
+

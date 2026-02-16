@@ -23,7 +23,6 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx,rw \
 #RUN bash -c "rm -f /etc/{machine-id,hostname,locale.conf} || echo true"
 #RUN echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen && locale-gen && update-locale LANG=en_US.UTF-8
 RUN passwd -d root && passwd -l root && sed -i 's/^root:[^:]*:/root::/' /etc/shadow
-RUN bash -c "rm -f /etc/{machine-id,localtime,hostname,locale.conf} || echo true"
 
 # https://bootc-dev.github.io/bootc/bootc-images.html#standard-metadata-for-bootc-compatible-images
 LABEL containers.bootc 1

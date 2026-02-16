@@ -1,0 +1,41 @@
+#!/bin/bash
+
+set -euo pipefail
+
+TARGET_DEVICE="$1"
+MOUNT_POINT="$2"
+
+MOUNT_POINT="${1:-/tmp/calamares-root}"
+
+CURRENT_IMAGE="ghcr.io/davidbitterlich/debian-atomic-edition"
+
+CALAMARES_STORAGE="/tmp/calamares-state.json"
+
+get_partition_uuid() {
+    local mountpoint="$1"
+    lsblk -no UUID "$(findmnt -n -o SOURCE --target "${MOUNT_POINT}${mountpoint}" 2>/dev/null)" 2>/dev/null || echo ""
+}
+
+ROOT_UUID=$(get_partition_uuid "")
+BOOT_UUID=$(get_partition_uuid "/boot")
+
+BOOTC_ARGS=(
+    "to-filesystem"
+    "--generic-image"
+    "--karg=console=tty0"
+    "--karg=quiet"
+    "--karg=splash"
+)
+
+if [ -n "${ROOT_UUID}" ]
+then
+    BOOTC_ARGS+=("--root-mount-spec=UUID=${ROOT_UUID}")
+fi
+
+if [ -n "${BOOT_UUID}" ]
+then
+    BOOTC_ARGS+=("--boot-mount-spec=UUID=${BOOT_UUID}")
+fi
+
+bootc install "${BOOTC_ARGS[@]}" "${MOUNT_POINT}"
+
