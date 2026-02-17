@@ -5,7 +5,16 @@ COPY build_files /
 
 FROM $IMAGE:$TAG
 
+# Issues so far:
+# user home permissions are not set, unable to log in via sddm
+# sddm does not automatically log in
+# live-user does not have sudo permissions
+# calamares does not find partitions
+# base image: no fdisk
+# additional crap in the image that does not belong there
+
 # install and prepare calamares
+ARG DEBIAN_FRONTEND=noninteractive
 RUN --mount=type=bind,from=ctx,source=/,target=/ctx,rw \
     --mount=type=cache,dst=/var/cache \
     --mount=type=cache,dst=/var/log \
@@ -15,9 +24,15 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx,rw \
     apt-get update && apt-get install -y calamares calamares-settings-debian && \
     apt-get clean && cp -r /ctx/calamares/* /
 
+#RUN echo "Etc/UTC" > /etc/timezone && DEBIAN_FRONTEND=noninteractive dpkg-reconfigure tzdata
+RUN ln -sf /usr/share/zoneinfo/Etc/UTC /etc/localtime && \
+    echo "Etc/UTC" > /etc/timezone
+
 # prepare live environment
-RUN echo $IMAGE > /etc/hostname
-RUN echo "127.0.1.1 $IMAGE" >> /etc/hosts
+RUN echo "host.containers.internal" > /etc/hostname
+#RUN sed "s,127\.0\.1\.1*,127\.0\.1\.1 $IMAGE,g" /etc/hosts > /etc/hosts-tmp && lsof +D /etc/hosts && rm -f /etc/hosts && mv /etc/hosts-tmp /etc/hosts
 RUN useradd -m -s /bin/bash -d /var/home/live-user live-user && echo "live-user:changeme" | chpasswd
+RUN echo "live-user ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/live-user
+RUN echo "[Autologin]\nUser=live-user\nSession=plasma" > /etc/sddm.conf
 
 

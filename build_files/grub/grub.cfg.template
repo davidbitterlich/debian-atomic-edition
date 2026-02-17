@@ -1,0 +1,33 @@
+set default="1"
+
+function load_video {
+  insmod all_video
+}
+
+load_video
+set gfxpayload=keep
+insmod gzio
+insmod part_gpt
+insmod chain
+
+set timeout=60
+
+search --no-floppy --set=root -l 'debian-atomic-boot'
+
+menuentry 'Install @PRETTY_NAME@' --class gnu-linux --class gnu --class os {
+	linux ($root)/live/vmlinuz quiet rhgb enforcing=0
+	initrd ($root)/live/initramfs.img
+}
+
+submenu 'Troubleshooting -->' {
+	menuentry 'Install @PRETTY_NAME@ in basic graphics mode' --class gnu-linux --class gnu --class os {
+		linux ($root)/live/vmlinuz quiet rhgb root=live:CDLABEL=debian-atomic-boot enforcing=0 rd.live.image nomodeset
+		initrd ($root)/live/initramfs.img
+	}
+	menuentry 'Boot first drive' --class gnu-linux --class gnu --class os {
+		chainloader (hd0)+1
+	}
+	menuentry 'Boot second drive' --class gnu-linux --class gnu --class os {
+		chainloader (hd1)+1
+	}
+}
