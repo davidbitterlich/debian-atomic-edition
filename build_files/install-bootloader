@@ -7,4 +7,4 @@ trap 'echo "::endgroup::"' EXIT
 # install bootloader
 
 apt-get update -y
-apt-get install -y --allow-remove-essential systemd systemd-boot grub-efi
+apt-get install -y --allow-remove-essential systemd-boot grub-efi
