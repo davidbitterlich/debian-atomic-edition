@@ -12,11 +12,11 @@ insmod chain
 
 set timeout=60
 
-search --no-floppy --set=root -l 'debian-atomic-boot'
+search --no-floppy --set=root -l 'debian_boot'
 
-menuentry 'Install @PRETTY_NAME@' --class gnu-linux --class gnu --class os {
-	linux ($root)/live/vmlinuz quiet rhgb enforcing=0
-	initrd ($root)/live/initramfs.img
+menuentry 'Install @PRETTY_NAME@' --class debian --class gnu-linux --class gnu --class os {
+	linux ($root)/LiveOS/vmlinuz root=live:CDLABEL=debian_boot enforcing=0 rd.live.image
+	initrd ($root)/LiveOS/initramfs.img
 }
 
 submenu 'Troubleshooting -->' {
